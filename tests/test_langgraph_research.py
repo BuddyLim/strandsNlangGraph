@@ -127,3 +127,10 @@ def test_run_research_collects_findings_and_uses_stream_output_as_summary(monkey
     assert [f.subtopic for f in report.findings] == ["alpha", "beta"]
     assert report.question == "Q"
     assert "5" in holder["prompt"] and "Q" in holder["prompt"]
+
+
+def test_ai_text_flattens_str_and_list_content():
+    # Gemini emits content as a str normally, but can emit a list of blocks.
+    assert research._ai_text("plain") == "plain"
+    assert research._ai_text([{"text": "a"}, {"text": "b"}]) == "ab"
+    assert research._ai_text(None) == ""

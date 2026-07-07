@@ -90,3 +90,12 @@ def test_live_end_to_end_smoke():
     assert report.summary.strip() != ""
     # Fan-out is LLM-driven, so the count is not guaranteed — only bounded by the soft target.
     assert 0 <= len(report.findings) <= 2
+
+
+def test_main_reports_unexpected_error_cleanly(monkeypatch, capsys):
+    def _boom(request, **kwargs):
+        raise ValueError("gemini throttled")
+    monkeypatch.setattr(run, "run_research", _boom)
+    code = run.main(["What is X?"])
+    assert code == 1
+    assert "research failed:" in capsys.readouterr().err

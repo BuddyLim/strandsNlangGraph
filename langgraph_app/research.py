@@ -1,6 +1,6 @@
 import sys
 
-from langchain.agents import create_agent  # Task 0 pin: fallback alias as in basic.py
+from langchain.agents import create_agent  # current-canon prebuilt agent (langchain 1.x)
 from langchain_core.tools import tool
 
 from common.prompts import COORDINATOR_PROMPT, SUB_AGENT_PROMPT
@@ -72,7 +72,7 @@ def build_coordinator(
     return create_agent(
         model or build_gemini_model(),
         tools=[make_research_tool(findings, grounded=grounded, model=model, verbose=verbose)],
-        system_prompt=COORDINATOR_PROMPT,  # Task 0 pin: `prompt=` on the fallback API
+        system_prompt=COORDINATOR_PROMPT,  # system_prompt= is the create_agent kwarg
     )
 
 

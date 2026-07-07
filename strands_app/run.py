@@ -31,6 +31,7 @@ def format_report(report: ResearchReport) -> str:
     """Render the full report: title, summary, and the per-subtopic findings."""
     return "\n".join(
         [
+            "",
             f"# Research: {report.question}",
             "",
             "## Summary",

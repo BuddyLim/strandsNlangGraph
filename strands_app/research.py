@@ -52,12 +52,14 @@ def _research_impl(
     """
     if not verbose:
         # Progress line so each sub-agent's subtopic streams into view as it runs.
-        print(f"\n▸ researching: {subtopic}", flush=True)
+        print(f"▸ researching: {subtopic}\n", flush=True)
     try:
         sub_model = model or build_gemini_model(grounded=grounded)
         tools = None if grounded else [mock_search]
         researcher = Agent(
-            model=sub_model, tools=tools, system_prompt=SUB_AGENT_PROMPT,
+            model=sub_model,
+            tools=tools,
+            system_prompt=SUB_AGENT_PROMPT,
             **_subagent_kwargs(verbose),
         )
         text = str(researcher(f"Research this subtopic: {subtopic}"))
@@ -81,8 +83,7 @@ def make_research_tool(
     @tool
     def research_topic(subtopic: str) -> str:
         """Research one subtopic and return factual findings about it."""
-        return _research_impl(subtopic, findings, grounded=grounded, model=model,
-                              verbose=verbose)
+        return _research_impl(subtopic, findings, grounded=grounded, model=model, verbose=verbose)
 
     return research_topic
 

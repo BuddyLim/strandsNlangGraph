@@ -42,7 +42,7 @@ def test_research_impl_degrades_gracefully_on_error(monkeypatch):
 def test_run_research_collects_findings_and_uses_coordinator_output_as_summary(monkeypatch):
     captured = {}
 
-    def fake_build_coordinator(findings, grounded=False, model=None):
+    def fake_build_coordinator(findings, grounded=False, model=None, verbose=False):
         class FakeCoordinator:
             def __call__(self, question):
                 # Capture the received prompt for assertion
@@ -68,3 +68,16 @@ def test_coordinator_registers_research_topic_tool(fake_model):
     findings: list[SubFinding] = []
     coordinator = research.build_coordinator(findings, model=fake_model)
     assert "research_topic" in coordinator.tool_names
+
+
+def test_coordinator_suppresses_trace_by_default(fake_model):
+    findings: list[SubFinding] = []
+    coordinator = research.build_coordinator(findings, model=fake_model)
+    # Strands installs a no-op `null_callback_handler` when callback_handler=None.
+    assert getattr(coordinator.callback_handler, "__name__", "") == "null_callback_handler"
+
+
+def test_coordinator_verbose_keeps_the_printing_trace(fake_model):
+    findings: list[SubFinding] = []
+    coordinator = research.build_coordinator(findings, model=fake_model, verbose=True)
+    assert type(coordinator.callback_handler).__name__ == "PrintingCallbackHandler"

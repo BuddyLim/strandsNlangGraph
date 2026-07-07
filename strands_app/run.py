@@ -46,11 +46,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="use Gemini native Google Search instead of the mock tool",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="stream the agents' live tool-call trace (default: quiet)",
+    )
     args = parser.parse_args(argv)
 
     request = ResearchRequest(question=args.question, n_subtopics=args.subtopics)
     try:
-        report = run_research(request, grounded=args.grounded)
+        report = run_research(request, grounded=args.grounded, verbose=args.verbose)
     except RuntimeError as exc:
         # Config failures (e.g. missing key) — clean message, no stack trace.
         print(f"error: {exc}", file=sys.stderr)

@@ -36,19 +36,34 @@ def test_format_report_shows_empty_state_when_no_subagents_ran():
 def test_main_wires_args_into_run_research(monkeypatch, capsys):
     captured = {}
 
-    def _fake_run_research(request, grounded=False, model=None):
+    def _fake_run_research(request, grounded=False, model=None, verbose=False):
         captured["request"] = request
         captured["grounded"] = grounded
+        captured["verbose"] = verbose
         return ResearchReport(question=request.question, summary="ok", findings=[])
 
     monkeypatch.setattr(run, "run_research", _fake_run_research)
-    code = run.main(["What is X?", "--subtopics", "2", "--grounded"])
+    code = run.main(["What is X?", "--subtopics", "2", "--grounded", "--verbose"])
 
     assert code == 0
     assert captured["request"].question == "What is X?"
     assert captured["request"].n_subtopics == 2
     assert captured["grounded"] is True
+    assert captured["verbose"] is True
     assert "ok" in capsys.readouterr().out
+
+
+def test_main_defaults_to_quiet(monkeypatch):
+    captured = {}
+
+    def _fake_run_research(request, grounded=False, model=None, verbose=False):
+        captured["verbose"] = verbose
+        return ResearchReport(question=request.question, summary="ok", findings=[])
+
+    monkeypatch.setattr(run, "run_research", _fake_run_research)
+    run.main(["What is X?"])
+
+    assert captured["verbose"] is False
 
 
 @pytest.mark.live

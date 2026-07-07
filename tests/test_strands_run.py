@@ -53,17 +53,25 @@ def test_main_wires_args_into_run_research(monkeypatch, capsys):
     assert "ok" in capsys.readouterr().out
 
 
-def test_main_defaults_to_quiet(monkeypatch):
+def test_main_defaults_to_streaming_and_prints_findings_recap(monkeypatch, capsys):
     captured = {}
 
     def _fake_run_research(request, grounded=False, model=None, verbose=False):
         captured["verbose"] = verbose
-        return ResearchReport(question=request.question, summary="ok", findings=[])
+        return ResearchReport(
+            question=request.question, summary="STREAMED-SUMMARY",
+            findings=[SubFinding(subtopic="alpha", findings="fa")],
+        )
 
     monkeypatch.setattr(run, "run_research", _fake_run_research)
-    run.main(["What is X?"])
+    code = run.main(["What is X?"])
+    out = capsys.readouterr().out
 
+    assert code == 0
     assert captured["verbose"] is False
+    assert "Sub-agent findings" in out and "alpha" in out   # recap prints
+    # Summary streams live inside run_research; main must not re-print it here.
+    assert "STREAMED-SUMMARY" not in out
 
 
 @pytest.mark.live

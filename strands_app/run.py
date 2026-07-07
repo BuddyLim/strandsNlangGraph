@@ -6,30 +6,39 @@ from common.types import ResearchReport, ResearchRequest
 from strands_app.research import run_research
 
 
-def format_report(report: ResearchReport) -> str:
-    """Render a report as readable CLI text.
+def format_findings(report: ResearchReport) -> str:
+    """Render just the per-subtopic findings section.
 
-    The per-subtopic findings live under their own labelled section so they read
-    as distinct from the coordinator's synthesized summary. Because the fan-out
-    is LLM-driven, the coordinator may answer directly without delegating — in
-    that case the section says so explicitly rather than rendering blank.
+    Kept separate from the summary because in streaming mode the summary has
+    already streamed live, so only this recap is printed afterwards. Because the
+    fan-out is LLM-driven, the coordinator may answer directly without delegating —
+    in that case the section says so explicitly rather than rendering blank.
     """
-    lines = [f"# Research: {report.question}", "", "## Summary", report.summary, ""]
-
     n = len(report.findings)
     if n == 0:
-        lines += [
-            "## Sub-agent findings",
-            "_(coordinator answered directly without delegating to sub-agents)_",
-            "",
-        ]
-    else:
-        lines += [f"## Sub-agent findings ({n} spawned)", ""]
-        for f in report.findings:
-            status = "" if f.ok else " (failed)"
-            lines += [f"### {f.subtopic}{status}", f.findings, ""]
+        return (
+            "## Sub-agent findings\n"
+            "_(coordinator answered directly without delegating to sub-agents)_"
+        )
+    lines = [f"## Sub-agent findings ({n} spawned)", ""]
+    for f in report.findings:
+        status = "" if f.ok else " (failed)"
+        lines += [f"### {f.subtopic}{status}", f.findings, ""]
+    return "\n".join(lines).rstrip()
 
-    return "\n".join(lines)
+
+def format_report(report: ResearchReport) -> str:
+    """Render the full report: title, summary, and the per-subtopic findings."""
+    return "\n".join(
+        [
+            f"# Research: {report.question}",
+            "",
+            "## Summary",
+            report.summary,
+            "",
+            format_findings(report),
+        ]
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -49,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--verbose",
         action="store_true",
-        help="stream the agents' live tool-call trace (default: quiet)",
+        help="show Strands' raw tool-call trace instead of the curated streaming output",
     )
     args = parser.parse_args(argv)
 
@@ -64,7 +73,15 @@ def main(argv: list[str] | None = None) -> int:
         # Covers model throttling / transient provider errors surfaced by Strands.
         print(f"research failed: {exc}", file=sys.stderr)
         return 1
-    print(format_report(report))
+
+    if args.verbose:
+        # The raw trace already streamed above; print the full structured recap.
+        print(format_report(report))
+    else:
+        # Subtopic progress + summary already streamed live; end the streamed line
+        # with a blank separator, then print the per-subtopic findings recap.
+        print("\n")
+        print(format_findings(report))
     return 0
 
 

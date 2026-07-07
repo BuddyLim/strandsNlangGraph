@@ -6,21 +6,23 @@ from strands_app.basic import mock_search
 from strands_app.model import build_gemini_model
 
 
-def _research_impl(subtopic: str, findings: list[SubFinding],
-                   grounded: bool = False, model=None) -> str:
+def _research_impl(
+    subtopic: str, findings: list[SubFinding], grounded: bool = False, model=None
+) -> str:
     """Spawn a fresh researcher sub-agent for one subtopic.
 
-    Constructing the Agent IS the subagent spawn. Records a SubFinding into
-    `findings` (shared with the coordinator run) and returns the researcher's
-    text for the coordinator to synthesize. Degrades gracefully: on any error
-    it records ok=False and returns a failure string rather than raising, so one
-    bad subtopic never aborts the whole run.
+    Constructing the Agent IS the subagent spawn. Returns the researcher's text,
+    which is what the coordinator actually receives (as the tool result) and
+    synthesizes. Separately appends a SubFinding to `findings` — an out-of-band
+    collector the run uses to reconstruct the per-subtopic breakdown for the
+    report; the coordinator never reads this list. Degrades gracefully: on any
+    error it records ok=False and returns a failure string rather than raising,
+    so one bad subtopic never aborts the whole run.
     """
     try:
         sub_model = model or build_gemini_model(grounded=grounded)
         tools = None if grounded else [mock_search]
-        researcher = Agent(model=sub_model, tools=tools,
-                           system_prompt=SUB_AGENT_PROMPT)
+        researcher = Agent(model=sub_model, tools=tools, system_prompt=SUB_AGENT_PROMPT)
         text = str(researcher(f"Research this subtopic: {subtopic}"))
         findings.append(SubFinding(subtopic=subtopic, findings=text, ok=True))
         return text
@@ -39,6 +41,7 @@ def make_research_tool(findings: list[SubFinding], grounded: bool = False, model
 
     @tool
     def research_topic(subtopic: str) -> str:
+        print(subtopic)
         """Research one subtopic and return factual findings about it."""
         return _research_impl(subtopic, findings, grounded=grounded, model=model)
 

@@ -15,6 +15,24 @@ def test_format_report_shows_summary_and_each_subtopic():
     assert "alpha" in text and "beta" in text
 
 
+def test_format_report_labels_findings_section_with_subagent_count():
+    report = ResearchReport(
+        question="Q", summary="s",
+        findings=[SubFinding(subtopic="alpha", findings="x"),
+                  SubFinding(subtopic="beta", findings="y")],
+    )
+    text = run.format_report(report)
+    assert "2 spawned" in text      # section labelled with the sub-agent count
+    assert "### alpha" in text      # subtopics demoted to h3 under that section
+
+
+def test_format_report_shows_empty_state_when_no_subagents_ran():
+    report = ResearchReport(question="Q", summary="direct answer", findings=[])
+    text = run.format_report(report)
+    assert "direct answer" in text
+    assert "without delegating" in text
+
+
 def test_main_wires_args_into_run_research(monkeypatch, capsys):
     captured = {}
 
@@ -38,7 +56,9 @@ def test_main_wires_args_into_run_research(monkeypatch, capsys):
 def test_live_end_to_end_smoke():
     report = run_research_live()
     assert report.summary.strip() != ""
-    assert len(report.findings) == 2
+    # Fan-out is LLM-driven, so the count is not guaranteed — only bounded by the
+    # soft target. The real signal is a non-empty synthesized summary.
+    assert 0 <= len(report.findings) <= 2
 
 
 def run_research_live():

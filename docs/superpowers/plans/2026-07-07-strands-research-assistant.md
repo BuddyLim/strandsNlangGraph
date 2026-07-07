@@ -21,8 +21,13 @@
 
 ### Task 1: Project scaffold + config
 
+> **Environment note (already done by the controller):** `pyproject.toml`,
+> `.gitignore`, the uv virtualenv, and `uv.lock` already exist — deps are
+> uv-managed (`strands-agents[gemini]` 1.45.0, `pydantic`, `pydantic-settings`,
+> plus `pytest`/`ruff` in the dev group). Do NOT create or edit `pyproject.toml`.
+> Run tests with `uv run pytest`, not bare `pytest`.
+
 **Files:**
-- Create: `pyproject.toml`
 - Create: `.env.example`
 - Create: `common/__init__.py` (empty)
 - Create: `common/config.py`
@@ -33,41 +38,17 @@
 - Consumes: nothing.
 - Produces: `common.config.settings` (a `Settings` instance with `google_api_key: str`, `model_id: str`, `n_subtopics: int`); `common.config.require_api_key() -> str` (returns the key or raises `RuntimeError`).
 
-- [ ] **Step 1: Write `pyproject.toml`**
-
-```toml
-[project]
-name = "strands-n-langgraph"
-version = "0.1.0"
-description = "Comparative learning repo: Strands vs LangGraph research assistant"
-requires-python = ">=3.11"
-dependencies = [
-    "strands-agents[gemini]>=0.1.0",
-    "pydantic>=2.0",
-    "pydantic-settings>=2.0",
-]
-
-[project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.6"]
-
-[tool.pytest.ini_options]
-markers = ["live: makes real Gemini API calls; skipped without GOOGLE_API_KEY"]
-
-[tool.ruff]
-line-length = 100
-```
-
-- [ ] **Step 2: Write `.env.example`**
+- [ ] **Step 1: Write `.env.example`**
 
 ```
 GOOGLE_API_KEY=your-gemini-api-key-here
 ```
 
-- [ ] **Step 3: Create empty package markers**
+- [ ] **Step 2: Create empty package markers**
 
 Create `common/__init__.py` and `tests/__init__.py` as empty files.
 
-- [ ] **Step 4: Write the failing test** — `tests/test_config.py`
+- [ ] **Step 3: Write the failing test** — `tests/test_config.py`
 
 ```python
 import pytest
@@ -91,12 +72,12 @@ def test_require_api_key_returns_key_when_present(monkeypatch):
     assert require_api_key() == "secret"
 ```
 
-- [ ] **Step 5: Run test to verify it fails**
+- [ ] **Step 4: Run test to verify it fails**
 
-Run: `pytest tests/test_config.py -v`
+Run: `uv run pytest tests/test_config.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'common.config'`
 
-- [ ] **Step 6: Write `common/config.py`**
+- [ ] **Step 5: Write `common/config.py`**
 
 ```python
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -128,16 +109,16 @@ def require_api_key() -> str:
     return settings.google_api_key
 ```
 
-- [ ] **Step 7: Run tests to verify they pass**
+- [ ] **Step 6: Run tests to verify they pass**
 
-Run: `pytest tests/test_config.py -v`
+Run: `uv run pytest tests/test_config.py -v`
 Expected: PASS (3 passed)
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add pyproject.toml .env.example common/ tests/
-git commit -m "add project scaffold and fail-fast config"
+git add .env.example common/ tests/
+git commit -m "add fail-fast config and package scaffold"
 ```
 
 ---
@@ -409,25 +390,19 @@ def build_gemini_model(grounded: bool = False) -> GeminiModel:
     failures are early and clear.
     """
     api_key = require_api_key()
-    gemini_tools = (
-        [types.Tool(google_search=types.GoogleSearch())] if grounded else None
-    )
-    return GeminiModel(
-        client_args={"api_key": api_key},
-        model_id=settings.model_id,
-        gemini_tools=gemini_tools,
-    )
+    # GeminiModel raises TypeError on gemini_tools=None (verified against
+    # strands-agents 1.45.0), so only pass the kwarg in grounded mode.
+    kwargs = {"client_args": {"api_key": api_key}, "model_id": settings.model_id}
+    if grounded:
+        kwargs["gemini_tools"] = [types.Tool(google_search=types.GoogleSearch())]
+    return GeminiModel(**kwargs)
 ```
-
-> Note: if `GeminiModel` rejects `gemini_tools=None`, pass the kwarg only when
-> `grounded` is true by building a `kwargs` dict. Verify in Step 5.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `pytest tests/test_strands_model.py -v`
-Expected: PASS (3 passed). If `test_build_model_grounded_attaches_search_tool`
-fails on the config key name, print `build_gemini_model(grounded=True).get_config()`
-and adjust the assertion/key to the actual field, then re-run.
+Expected: PASS (3 passed). The `get_config()` fields (`model_id`, and
+`gemini_tools` only in grounded mode) are verified against strands-agents 1.45.0.
 
 - [ ] **Step 6: Commit**
 
@@ -518,9 +493,8 @@ def answer_question(question: str, model=None) -> str:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pytest tests/test_strands_basic.py -v`
-Expected: PASS (2 passed). If `agent.tool_names` is not the correct attribute
-for the installed Strands version, inspect `dir(agent)` for the tool registry
-accessor and update the assertion + any downstream use.
+Expected: PASS (2 passed). `agent.tool_names` returns `['mock_search']` —
+verified against strands-agents 1.45.0.
 
 - [ ] **Step 5: Commit**
 
@@ -846,6 +820,8 @@ git commit -m "add Strands CLI entrypoint and live smoke test"
 - Model-throttling clean CLI message → Task 7 `main` catches `RuntimeError` (config) and any other exception at the CLI boundary, printing a one-line message and returning exit code 1. This covers `ModelThrottledException` without hard-coding its import path (caught by the broad `except`), so no stack trace ever reaches the user.
 - Tests at boundaries, deterministic → every task mocks at the boundary; one opt-in `live` test.
 
-**Placeholder scan:** one `>` note in Task 4 flags an SDK-detail verification (the grounded-config field name via `get_config()`) — a verification instruction with a concrete fallback, not an unfilled placeholder.
+**Placeholder scan:** none. All SDK-detail assumptions (`get_config()` fields,
+`agent.tool_names`, `gemini_tools` must be omitted rather than passed as `None`)
+were verified live against strands-agents 1.45.0 and baked into the task code.
 
 **Type consistency:** `SubFinding(subtopic, findings, ok)`, `ResearchReport(question, summary, findings)`, `SubtopicPlan(subtopics)`, and the four `research.py` function signatures are used identically across Tasks 2, 6, and 7. `mock_search` is a plain function in `common/tools.py` (Task 3) and re-wrapped as a `@tool` in both `basic.py` and `research.py` (Tasks 5, 6) — consistent.

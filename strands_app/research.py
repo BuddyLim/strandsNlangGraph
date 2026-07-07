@@ -1,56 +1,67 @@
-from strands import Agent
+from strands import Agent, tool
 
-from common.prompts import PLANNER_PROMPT, SUB_AGENT_PROMPT, SYNTHESIS_PROMPT
-from common.types import ResearchReport, ResearchRequest, SubFinding, SubtopicPlan
+from common.prompts import COORDINATOR_PROMPT, SUB_AGENT_PROMPT
+from common.types import ResearchReport, ResearchRequest, SubFinding
 from strands_app.basic import mock_search
 from strands_app.model import build_gemini_model
 
 
-def plan_subtopics(question: str, n: int, model=None) -> list[str]:
-    """Split the question into n distinct subtopics using structured output."""
-    planner = Agent(model=model or build_gemini_model(),
-                    system_prompt=PLANNER_PROMPT)
-    plan: SubtopicPlan = planner.structured_output(
-        SubtopicPlan,
-        f"Question: {question}\nProduce exactly {n} subtopics.",
-    )
-    return plan.subtopics[:n]
+def _research_impl(subtopic: str, findings: list[SubFinding],
+                   grounded: bool = False, model=None) -> str:
+    """Spawn a fresh researcher sub-agent for one subtopic.
 
-
-def research_subtopic(subtopic: str, grounded: bool = False, model=None) -> SubFinding:
-    """Spawn a fresh sub-agent to research one subtopic.
-
-    Each call constructs its own Agent — that construction IS the subagent
-    spawn. Failures are caught and returned as a degraded SubFinding so one bad
-    subtopic never aborts the whole report.
+    Constructing the Agent IS the subagent spawn. Records a SubFinding into
+    `findings` (shared with the coordinator run) and returns the researcher's
+    text for the coordinator to synthesize. Degrades gracefully: on any error
+    it records ok=False and returns a failure string rather than raising, so one
+    bad subtopic never aborts the whole run.
     """
     try:
         sub_model = model or build_gemini_model(grounded=grounded)
         tools = None if grounded else [mock_search]
         researcher = Agent(model=sub_model, tools=tools,
                            system_prompt=SUB_AGENT_PROMPT)
-        answer = str(researcher(f"Research this subtopic: {subtopic}"))
-        return SubFinding(subtopic=subtopic, findings=answer, ok=True)
-    except Exception as exc:  # noqa: BLE001 — deliberate graceful degradation boundary
-        return SubFinding(subtopic=subtopic, findings=f"failed: {exc}", ok=False)
+        text = str(researcher(f"Research this subtopic: {subtopic}"))
+        findings.append(SubFinding(subtopic=subtopic, findings=text, ok=True))
+        return text
+    except Exception as exc:  # noqa: BLE001 — deliberate graceful-degradation boundary
+        message = f"failed: {exc}"
+        findings.append(SubFinding(subtopic=subtopic, findings=message, ok=False))
+        return message
 
 
-def synthesize(question: str, findings: list[SubFinding], model=None) -> str:
-    """Merge per-subtopic findings into one answer to the original question."""
-    synthesizer = Agent(model=model or build_gemini_model(),
-                        system_prompt=SYNTHESIS_PROMPT)
-    joined = "\n\n".join(f"## {f.subtopic}\n{f.findings}" for f in findings)
-    return str(synthesizer(
-        f"Question: {question}\n\nFindings:\n{joined}\n\nWrite a synthesis."
-    ))
+def make_research_tool(findings: list[SubFinding], grounded: bool = False, model=None):
+    """Build the research_topic @tool bound to a findings collector for one run.
+
+    The tool is a closure so each coordinator run gets its own findings list and
+    grounded/model settings, while the LLM sees a stable single-arg tool.
+    """
+
+    @tool
+    def research_topic(subtopic: str) -> str:
+        """Research one subtopic and return factual findings about it."""
+        return _research_impl(subtopic, findings, grounded=grounded, model=model)
+
+    return research_topic
 
 
-def run_research(request: ResearchRequest, grounded: bool = False,
-                 model=None) -> ResearchReport:
-    """Plan subtopics, spawn one sub-agent per subtopic, then synthesize."""
-    subtopics = plan_subtopics(request.question, request.n_subtopics, model=model)
-    findings = [research_subtopic(st, grounded=grounded, model=model)
-                for st in subtopics]
-    summary = synthesize(request.question, findings, model=model)
-    return ResearchReport(question=request.question, summary=summary,
-                          findings=findings)
+def build_coordinator(findings: list[SubFinding], grounded: bool = False, model=None) -> Agent:
+    """Coordinator agent that decomposes the question and delegates via research_topic."""
+    return Agent(
+        model=model or build_gemini_model(),
+        tools=[make_research_tool(findings, grounded=grounded, model=model)],
+        system_prompt=COORDINATOR_PROMPT,
+    )
+
+
+def run_research(request: ResearchRequest, grounded: bool = False, model=None) -> ResearchReport:
+    """Run the coordinator; it decides subtopics and spawns a sub-agent per subtopic.
+
+    Unlike a Python fan-out, the coordinator LLM drives the fan-out: it calls
+    research_topic once per subtopic it identifies. We collect each SubFinding as
+    a side effect and use the coordinator's own output as the synthesized summary.
+    """
+    findings: list[SubFinding] = []
+    coordinator = build_coordinator(findings, grounded=grounded, model=model)
+    summary = str(coordinator(request.question))
+    return ResearchReport(question=request.question, summary=summary, findings=findings)

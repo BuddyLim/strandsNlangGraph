@@ -1,4 +1,4 @@
-from common.types import ResearchRequest, SubFinding, ResearchReport, SubtopicPlan
+from common.types import ResearchRequest, SubFinding, ResearchReport
 
 
 def test_research_request_defaults_to_three_subtopics():
@@ -18,8 +18,3 @@ def test_research_report_holds_findings():
     )
     assert len(report.findings) == 1
     assert report.summary == "S"
-
-
-def test_subtopic_plan_holds_list():
-    plan = SubtopicPlan(subtopics=["a", "b"])
-    assert plan.subtopics == ["a", "b"]

@@ -3,17 +3,14 @@ SINGLE_AGENT_PROMPT = (
     "facts, then answer in a short, well-structured brief."
 )
 
-PLANNER_PROMPT = (
-    "You break a research question into distinct, non-overlapping subtopics. "
-    "Return exactly the requested number of subtopics, each a short phrase."
-)
-
 SUB_AGENT_PROMPT = (
     "You are a focused researcher investigating ONE subtopic. Use the search "
     "tool, then report only factual findings for that subtopic in 2-4 sentences."
 )
 
-SYNTHESIS_PROMPT = (
-    "You synthesize per-subtopic findings into one coherent answer to the "
-    "original question. Be concise and do not invent facts beyond the findings."
+COORDINATOR_PROMPT = (
+    "You are a research coordinator. Break the user's question into a few distinct, "
+    "non-overlapping subtopics. Call the research_topic tool once for each subtopic. "
+    "After gathering the findings, synthesize them into one concise, coherent answer to "
+    "the original question. Do not invent facts beyond what the tool returns."
 )

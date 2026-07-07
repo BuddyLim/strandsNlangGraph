@@ -23,9 +23,3 @@ class ResearchReport(BaseModel):
     question: str
     summary: str
     findings: list[SubFinding] = Field(default_factory=list)
-
-
-class SubtopicPlan(BaseModel):
-    """Structured output of the planner: the subtopics to research."""
-
-    subtopics: list[str]

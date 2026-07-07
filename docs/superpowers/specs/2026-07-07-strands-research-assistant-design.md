@@ -106,6 +106,12 @@ coordinator agent
 The `researcher` tool catches its own exceptions and returns a structured
 "sub-topic failed: <reason>" string so one bad sub-topic degrades gracefully.
 
+The **coordinator LLM decides how many subtopics** to research and drives the fan-out
+itself (it is not a Python loop). `ResearchRequest.n_subtopics` / the `--subtopics` flag
+is passed to the coordinator as a *soft target* ("aim for about N subtopics"), not a hard
+count — the model remains in charge. This is the distinctive Strands "the model
+orchestrates" lesson, and it maps in Unit 2 onto a LangGraph tool-calling agent.
+
 ### Model factory (`strands_app/model.py`)
 
 ```python

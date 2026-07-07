@@ -40,9 +40,13 @@ def test_research_impl_degrades_gracefully_on_error(monkeypatch):
 
 
 def test_run_research_collects_findings_and_uses_coordinator_output_as_summary(monkeypatch):
+    captured = {}
+
     def fake_build_coordinator(findings, grounded=False, model=None):
         class FakeCoordinator:
             def __call__(self, question):
+                # Capture the received prompt for assertion
+                captured['question'] = question
                 # simulate the coordinator LLM deciding two subtopics and delegating
                 findings.append(SubFinding(subtopic="alpha", findings="fa"))
                 findings.append(SubFinding(subtopic="beta", findings="fb"))
@@ -51,11 +55,13 @@ def test_run_research_collects_findings_and_uses_coordinator_output_as_summary(m
 
     monkeypatch.setattr(research, "build_coordinator", fake_build_coordinator)
 
-    report = research.run_research(ResearchRequest(question="Q"))
+    report = research.run_research(ResearchRequest(question="Q", n_subtopics=5))
 
     assert report.summary == "synthesized summary"
     assert [f.subtopic for f in report.findings] == ["alpha", "beta"]
     assert report.question == "Q"
+    assert "5" in captured['question']
+    assert "Q" in captured['question']
 
 
 def test_coordinator_registers_research_topic_tool(fake_model):

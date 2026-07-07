@@ -63,5 +63,6 @@ def run_research(request: ResearchRequest, grounded: bool = False, model=None) -
     """
     findings: list[SubFinding] = []
     coordinator = build_coordinator(findings, grounded=grounded, model=model)
-    summary = str(coordinator(request.question))
+    prompt = f"{request.question}\n\nAim for about {request.n_subtopics} subtopics."
+    summary = str(coordinator(prompt))
     return ResearchReport(question=request.question, summary=summary, findings=findings)

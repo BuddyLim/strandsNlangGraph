@@ -507,6 +507,15 @@ git commit -m "add Strands Stage A basic single-agent"
 
 ### Task 6: Stage B — subagent-spawning research fan-out
 
+> **⚠️ SUPERSEDED.** This task's original design (a code-orchestrated Python `for`-loop over
+> subtopics: `plan_subtopics` → `research_subtopic` per subtopic → `synthesize`) was shipped,
+> then reworked to Strands' idiomatic **"agents as tools"** pattern — the researcher sub-agent
+> is registered as a `@tool` and the **coordinator LLM** decides the subtopics and drives the
+> fan-out. See `.superpowers/sdd/task-8-brief.md` for the revised design and the spec's updated
+> Stage B section. The `plan_subtopics`/`synthesize` functions and the `SubtopicPlan` type below
+> no longer exist. The historical steps are kept for provenance; the current code is the
+> agents-as-tools version.
+
 **Files:**
 - Create: `strands_app/research.py`
 - Test: `tests/test_strands_research.py`

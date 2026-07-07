@@ -159,9 +159,12 @@ grounds internally."
   sub-topic (pure, no model).
 - `test_strands_basic.py` — Stage A agent, Gemini model faked at the boundary, reaches
   `mock_search` and returns a non-empty answer. Asserts the tool was reached, not how.
-- `test_strands_research.py` — coordinator fans out to N sub-agents and returns a
-  `ResearchReport` with N findings; a forced sub-agent failure still yields a report
-  (graceful degradation). Model mocked at the boundary → fast, free, deterministic.
+- `test_strands_research.py` — `_research_impl` spawns a researcher sub-agent and records a
+  `SubFinding` (with a forced-error test proving graceful degradation); `run_research`
+  collects findings via the tool closure and uses the coordinator's output as the summary;
+  the coordinator registers `research_topic` as a tool. Agents/model faked at the boundary →
+  fast, free, deterministic. The LLM-driven fan-out itself is exercised by the opt-in `live`
+  test, since faking the coordinator's tool-calling loop would assert nothing real.
 
 ## Alternatives considered
 
@@ -180,9 +183,12 @@ grounds internally."
   a real abstraction would hide framework idioms; a one-function model factory is enough.
 - Chose a mock function tool over real web search as the primary tool because determinism +
   no extra credential keeps the focus on framework mechanics.
-- Chose "agents as tools" over Strands Swarm/Graph for Stage B because it is the most direct
-  expression of coordinator-spawns-sub-agents and maps cleanly to LangGraph's fan-out in
-  Unit 2, keeping the comparison honest.
+- Chose the idiomatic "agents as tools" pattern (coordinator LLM decides subtopics and calls
+  a `research_topic` @tool per subtopic) over a code-orchestrated Python fan-out for Stage B,
+  because learning-goal #2 is to see each framework's *distinctive* subagent mechanism, and
+  LLM-driven delegation is Strands' signature. In Unit 2 this maps onto a LangGraph
+  tool-calling (ReAct) agent, not `Send` — that is the honest cross-framework comparison.
+  (An earlier plan draft used a code-orchestrated loop; reworked to this after review.)
 - Chose to mock the model at the boundary in tests over live calls because tests must be
   fast, free, and deterministic.
 

@@ -1,15 +1,9 @@
-from strands import Agent, tool
+from strands import Agent
 
 from common.prompts import PLANNER_PROMPT, SUB_AGENT_PROMPT, SYNTHESIS_PROMPT
-from common.tools import mock_search as _mock_search
 from common.types import ResearchReport, ResearchRequest, SubFinding, SubtopicPlan
+from strands_app.basic import mock_search
 from strands_app.model import build_gemini_model
-
-
-@tool
-def mock_search(subtopic: str) -> str:
-    """Search for information about a subtopic and return findings."""
-    return _mock_search(subtopic)
 
 
 def plan_subtopics(question: str, n: int, model=None) -> list[str]:

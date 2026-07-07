@@ -1,4 +1,3 @@
-import pytest
 from common.types import ResearchRequest, SubFinding
 from strands_app import research
 

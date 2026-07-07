@@ -10,15 +10,16 @@ everything else (including the fake-model probe, which needs no key) ran live.
 
 | Fact | Value |
 |---|---|
-| prebuilt-agent import | `from langgraph.prebuilt import create_react_agent` (primary `from langchain.agents import create_agent` is **unavailable** — `langchain` package not installed) |
-| system-prompt kwarg | `prompt` (keyword-only) |
+| prebuilt-agent import | `from langchain.agents import create_agent` (current-canon entry point; `langchain` is now an explicit dependency — see Amendment) |
+| system-prompt kwarg | `system_prompt` (keyword-only) |
 | `langgraph` version | `1.2.8` |
 | `langchain-core` version | `1.4.8` |
 | `langchain-google-genai` version | `4.2.7` |
+| `langchain` version | `1.3.11` |
 | second Google SDK co-installed? | No — only pre-existing `google-genai==1.75.0` (+ `google-auth==2.55.1`); `google-generativeai` was NOT installed |
 | `streaming=True` on `ChatGoogleGenerativeAI` | Accepted — inherited from `BaseChatModel.__init__`, not an explicit param on `ChatGoogleGenerativeAI.__init__` |
-| `_COORDINATOR_NODE` | `"agent"` (**default, not live-confirmed** — no `GOOGLE_API_KEY` available; must be confirmed against a real model at first live run) |
-| `GenericFakeChatModel` through `create_react_agent`? | **Does NOT survive** — raises `NotImplementedError` from `BaseChatModel.bind_tools` (fake model has no tool-calling support). **Decision: Task 2's routing test must use the stub-agent wiring test only; tool routing is verified only in the live smoke test, not via a fake-model unit test.** |
+| `_COORDINATOR_NODE` | `"model"` (**static-from-graph** — read off `agent.get_graph().nodes` at construction time, no live model call needed; not yet confirmed against a real streamed run, see Amendment) |
+| `GenericFakeChatModel` through `create_agent`? | Construction succeeds (`create_agent` binds tools lazily inside the graph node rather than eagerly), but **invocation still fails** — raises `NotImplementedError` from `BaseChatModel.bind_tools` once the node actually runs. Same underlying limitation as `create_react_agent`, just deferred from construct-time to invoke-time. **Decision unchanged: Task 2's routing test must use the stub-agent wiring test only; tool routing is verified only in the live smoke test, not via a fake-model unit test.** |
 
 ## Step 1 — Add the dependencies
 
@@ -206,10 +207,132 @@ smoke test) before relying on it for stream-filtering logic.
 
 ## Open follow-ups for later tasks
 
-- Confirm `_COORDINATOR_NODE = "agent"` live once an API key is available.
-- If a future task wants the newer `langchain.agents.create_agent` API (to
-  pre-empt the V2.0 removal of `create_react_agent` from `langgraph.prebuilt`),
-  it will need to add `langchain` as an explicit dependency — not done here,
-  out of scope for Task 0.
+- ~~Confirm `_COORDINATOR_NODE = "agent"` live once an API key is available.~~
+  Superseded — see Amendment: the coordinator node is named `"model"` under
+  `create_agent`, confirmed statically from the compiled graph. Still needs a
+  live-streamed-run confirmation once a `GOOGLE_API_KEY` is available.
+- ~~If a future task wants the newer `langchain.agents.create_agent` API...~~
+  Done — see Amendment: `langchain` was added as an explicit dependency and
+  Unit 2 now targets `create_agent` as its canonical entry point.
 - Task 2 routing test: use a stub-agent wiring test (assert graph structure),
-  not a `GenericFakeChatModel` tool-routing test.
+  not a `GenericFakeChatModel` tool-routing test. (Unchanged by the Amendment.)
+
+## Amendment (2026-07-07) — switch to current-canon `create_agent`
+
+Task 0's original probes ran before `langchain` was added as a dependency, so
+they pinned the deprecated `from langgraph.prebuilt import create_react_agent`
+as a fallback. This amendment adds `langchain` and re-verifies the API
+surface against the current-canon `from langchain.agents import create_agent`.
+
+### Step A — Add `langchain`
+
+```
+uv add langchain
+```
+Resolved cleanly: `+ langchain==1.3.11`. No other package versions changed.
+
+### Step B — Confirm `create_agent` resolves and its signature
+
+```
+uv run python -c "from langchain.agents import create_agent; import inspect; print(inspect.signature(create_agent))"
+```
+Result: **succeeds**.
+```
+(model: 'str | BaseChatModel', tools: '...' = None, *,
+ system_prompt: 'str | SystemMessage | None' = None,
+ middleware=(), response_format=None, state_schema=None,
+ context_schema=None, checkpointer=None, store=None,
+ interrupt_before=None, interrupt_after=None, debug=False,
+ name=None, cache=None, transformers=None) -> CompiledStateGraph
+```
+**Decision: use `from langchain.agents import create_agent` as the
+prebuilt-agent entry point for Unit 2. The system-prompt kwarg is
+`system_prompt`** (keyword-only) — this replaces the old `prompt` kwarg
+used by `create_react_agent`. Later tasks should write
+`create_agent(model, tools=[...], system_prompt=...)`.
+
+### Step C — Static coordinator-node name (no API call)
+
+```
+uv run python -c "
+from langchain.agents import create_agent
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.tools import tool
+@tool
+def echo(x: str) -> str:
+    'echo'
+    return x
+model = ChatGoogleGenerativeAI(model='gemini-2.5-flash', google_api_key='dummy-not-used')
+agent = create_agent(model, tools=[echo], system_prompt='hi')
+print('NODES:', list(agent.get_graph().nodes))
+"
+```
+Result: `NODES: ['__start__', 'model', 'tools', '__end__']`
+
+Constructing `ChatGoogleGenerativeAI` and calling `create_agent` does not
+make a network call — the graph's node names are fixed at construction
+time, so this needed no `GOOGLE_API_KEY`.
+
+**`_COORDINATOR_NODE` is set to `"model"`** — the only candidate node besides
+`tools`/`__start__`/`__end__`, and the one that runs the chat model. This is
+**static-from-graph, not live-confirmed**: it has not yet been verified that
+`meta['langgraph_node']` on a real streamed run also reports `"model"`. Flag
+unchanged from the original notes: confirm against a real streamed run the
+first time a `GOOGLE_API_KEY` is available.
+
+### Step D — Fake-model viability under `create_agent`
+
+```
+uv run python -c "
+from langchain.agents import create_agent
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.tools import tool
+@tool
+def echo(x: str) -> str:
+    'echo'
+    return x
+try:
+    a = create_agent(GenericFakeChatModel(messages=iter([AIMessage(content='hi')])), tools=[echo], system_prompt='hi')
+    print('CONSTRUCT_OK')
+except Exception as e:
+    print('CONSTRUCT_FAILS:', type(e).__name__, e)
+"
+```
+Result: `CONSTRUCT_OK` — unlike `create_react_agent` (which raised
+`NotImplementedError` from `bind_tools` at construction time), `create_agent`
+constructs successfully with a `GenericFakeChatModel`.
+
+This looked like it might open the door to a fake-model tool-routing test for
+Task 2, so it was probed one step further — actually invoking the constructed
+agent (still no network call; `GenericFakeChatModel` is a local stub):
+```
+agent = create_agent(fake, tools=[echo], system_prompt='hi')
+res = agent.invoke({'messages': [{'role': 'user', 'content': 'go'}]})
+```
+Result: **fails** — `NotImplementedError` from `BaseChatModel.bind_tools`,
+raised once the `model` node actually runs and tries to bind tools to the
+fake model. `create_agent` just binds tools lazily inside the compiled graph
+node rather than eagerly at construction time (likely to support
+runtime-configurable tools via middleware/context), so the same underlying
+limitation as `create_react_agent` surfaces at invoke-time instead of
+construct-time.
+
+**Verdict unchanged: `GenericFakeChatModel` does NOT survive tool-routing
+through `create_agent`. Decision: Task 2's routing test must use the
+stub-agent wiring test only (assert graph structure/node names); tool
+routing is verified only in the live smoke test, not via a fake-model unit
+test.**
+
+### Amendment summary (supersedes the Step 1–5 findings above where they conflict)
+
+| Fact | Value |
+|---|---|
+| prebuilt-agent import | `from langchain.agents import create_agent` |
+| system-prompt kwarg | `system_prompt` |
+| `langgraph` version | `1.2.8` (unchanged) |
+| `langchain-core` version | `1.4.8` (unchanged) |
+| `langchain-google-genai` version | `4.2.7` (unchanged) |
+| `langchain` version | `1.3.11` (new) |
+| `_COORDINATOR_NODE` | `"model"` — static-from-graph, not live-confirmed |
+| fake-model through `create_agent` | Constructs OK, invocation fails (`NotImplementedError` on `bind_tools`) → Task 2 uses stub-agent wiring test only |

@@ -42,14 +42,55 @@ require_api_key()
 app = BedrockAgentCoreApp()
 
 
-def _handle(payload: dict) -> dict:
-    """Map a JSON payload to a report dict: {question, n_subtopics?, grounded?} -> dict.
+def _last_user_text(messages: list) -> str:
+    """Best-effort text of the most recent user message in a Bedrock messages list.
 
-    Framework-free (no BedrockAgentCore types) so it is unit-testable without the
-    runtime; `invoke` is the thin decorated entrypoint that delegates here.
+    Content may be a plain string or a list of blocks (``[{"text": ...}]``); both
+    shapes appear depending on the caller. Returns "" if no user text is found.
+    """
+    for message in reversed(messages):
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        content = message.get("content", "")
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            text = " ".join(
+                block.get("text", "") for block in content if isinstance(block, dict)
+            ).strip()
+            if text:
+                return text
+    return ""
+
+
+def _extract_question(payload: dict) -> str:
+    """Pull the research question out of an AgentCore invocation payload.
+
+    The runtime hands the entrypoint the raw JSON body. Direct callers use our
+    explicit ``{"question": ...}`` contract, but the AgentCore console and CLI
+    send the framework-native ``{"prompt": ...}`` or ``{"messages": [...]}``
+    shapes — accept all three rather than 500 on the common case.
+    """
+    question = payload.get("question") or payload.get("prompt")
+    if not question:
+        question = _last_user_text(payload.get("messages") or [])
+    if not question:
+        raise ValueError(
+            "payload must include a non-empty 'question', 'prompt', or 'messages' entry"
+        )
+    return question
+
+
+def _handle(payload: dict) -> dict:
+    """Map a JSON payload to a report dict.
+
+    Accepts ``question`` / ``prompt`` / ``messages`` for the research question,
+    plus optional ``n_subtopics`` and ``grounded``. Framework-free (no
+    BedrockAgentCore types) so it is unit-testable without the runtime; ``invoke``
+    is the thin decorated entrypoint that delegates here.
     """
     request = ResearchRequest(
-        question=payload["question"],
+        question=_extract_question(payload),
         n_subtopics=payload.get("n_subtopics", 3),
     )
     report = run_research(request, grounded=payload.get("grounded", False))

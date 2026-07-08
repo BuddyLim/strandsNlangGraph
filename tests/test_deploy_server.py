@@ -81,6 +81,57 @@ def test_handle_returns_report_model_dump_dict(monkeypatch):
     }
 
 
+def test_handle_accepts_agentcore_prompt_key(monkeypatch):
+    server = _load_server(monkeypatch)
+    fake = _fake_report()
+    monkeypatch.setattr(server, "run_research", fake)
+
+    server._handle({"prompt": "What is X?"})
+
+    assert fake.calls[0]["request"].question == "What is X?"
+
+
+def test_handle_prefers_explicit_question_over_prompt(monkeypatch):
+    server = _load_server(monkeypatch)
+    fake = _fake_report()
+    monkeypatch.setattr(server, "run_research", fake)
+
+    server._handle({"question": "explicit", "prompt": "generic"})
+
+    assert fake.calls[0]["request"].question == "explicit"
+
+
+def test_handle_extracts_question_from_messages(monkeypatch):
+    server = _load_server(monkeypatch)
+    fake = _fake_report()
+    monkeypatch.setattr(server, "run_research", fake)
+
+    server._handle(
+        {"messages": [{"role": "user", "content": [{"text": "What is X?"}]}]}
+    )
+
+    assert fake.calls[0]["request"].question == "What is X?"
+
+
+def test_handle_accepts_string_message_content(monkeypatch):
+    server = _load_server(monkeypatch)
+    fake = _fake_report()
+    monkeypatch.setattr(server, "run_research", fake)
+
+    server._handle({"messages": [{"role": "user", "content": "plain text"}]})
+
+    assert fake.calls[0]["request"].question == "plain text"
+
+
+def test_handle_without_any_question_raises_value_error(monkeypatch):
+    server = _load_server(monkeypatch)
+    monkeypatch.setattr(server, "run_research", _fake_report())
+
+    # A bare KeyError leaked a stack trace to the caller; this must be actionable.
+    with pytest.raises(ValueError, match="question|prompt|messages"):
+        server._handle({"unexpected": "shape"})
+
+
 @pytest.mark.parametrize("bad", ["", "STRANDS", "both", "gpt"])
 def test_invalid_app_raises_at_import(monkeypatch, tmp_path, bad):
     # chdir to an empty dir so the repo's own .env can't supply a fallback APP.

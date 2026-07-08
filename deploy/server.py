@@ -93,7 +93,7 @@ def _handle(payload: dict) -> dict:
         question=_extract_question(payload),
         n_subtopics=payload.get("n_subtopics", 3),
     )
-    report = run_research(request, grounded=payload.get("grounded", False))
+    report = run_research(request, grounded=payload.get("grounded", True))
     return report.model_dump()
 
 

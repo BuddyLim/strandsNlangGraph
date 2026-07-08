@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.agentcore.aws.dev/v1/agentcore.json",
+  "name": "strandsNlanggraph",
+  "version": 1,
+  "managedBy": "CDK",
+  "tags": {
+    "agentcore:created-by": "agentcore-cli",
+    "agentcore:project-name": "strandsNlanggraph"
+  },
+  "runtimes": [
+    {
+      "name": "strands",
+      "build": "Container",
+      "entrypoint": "deploy/server.py",
+      "codeLocation": ".",
+      "dockerfile": "Dockerfile",
+      "networkMode": "PUBLIC",
+      "protocol": "HTTP",
+      "envVars": [{ "name": "APP", "value": "strands" }]
+    }
+  ],
+  "memories": [],
+  "knowledgeBases": [],
+  "credentials": [
+    {
+      "authorizerType": "ApiKeyCredentialProvider",
+      "name": "strandsNlanggraphGemini"
+    }
+  ],
+  "evaluators": [],
+  "onlineEvalConfigs": [],
+  "agentCoreGateways": [],
+  "policyEngines": [],
+  "configBundles": [],
+  "abTests": [],
+  "harnesses": [],
+  "datasets": [],
+  "payments": []
+}

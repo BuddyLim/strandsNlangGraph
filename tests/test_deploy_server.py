@@ -82,7 +82,9 @@ def test_handle_returns_report_model_dump_dict(monkeypatch):
 
 
 @pytest.mark.parametrize("bad", ["", "STRANDS", "both", "gpt"])
-def test_invalid_app_raises_at_import(monkeypatch, bad):
+def test_invalid_app_raises_at_import(monkeypatch, tmp_path, bad):
+    # chdir to an empty dir so the repo's own .env can't supply a fallback APP.
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("APP", bad)
     monkeypatch.setattr("common.config.require_api_key", lambda: "test-key")
     sys.modules.pop("deploy.server", None)
@@ -90,9 +92,40 @@ def test_invalid_app_raises_at_import(monkeypatch, bad):
         importlib.import_module("deploy.server")
 
 
-def test_unset_app_raises_at_import(monkeypatch):
+def test_unset_app_raises_at_import(monkeypatch, tmp_path):
+    # No process env APP and no .env in this cwd -> nothing supplies it -> raise.
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("APP", raising=False)
     monkeypatch.setattr("common.config.require_api_key", lambda: "test-key")
     sys.modules.pop("deploy.server", None)
     with pytest.raises(RuntimeError, match="APP must be"):
         importlib.import_module("deploy.server")
+
+
+def test_app_from_dotenv_file_is_honoured(monkeypatch, tmp_path):
+    """Local dev: APP set only in a .env file (not the process env) is picked up.
+
+    Regression guard — a raw os.environ read would miss .env entirely.
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("APP=langgraph\n")
+    monkeypatch.delenv("APP", raising=False)
+    monkeypatch.setattr("common.config.require_api_key", lambda: "test-key")
+    sys.modules.pop("deploy.server", None)
+
+    server = importlib.import_module("deploy.server")
+
+    assert server.APP == "langgraph"
+
+
+def test_process_env_app_overrides_dotenv(monkeypatch, tmp_path):
+    """Deployed runtime: an injected APP env var wins over any .env fallback."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("APP=langgraph\n")
+    monkeypatch.setenv("APP", "strands")
+    monkeypatch.setattr("common.config.require_api_key", lambda: "test-key")
+    sys.modules.pop("deploy.server", None)
+
+    server = importlib.import_module("deploy.server")
+
+    assert server.APP == "strands"

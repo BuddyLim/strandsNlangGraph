@@ -15,7 +15,7 @@ The work is organised in three units:
 |------|------|-------|
 | 1 | Strands research assistant | `strands_app/` |
 | 2 | LangGraph research assistant | `langgraph_app/` |
-| 3 | Deploy to AWS Bedrock AgentCore | `deploy/`, `agentcore/`, root `Dockerfile` |
+| 3 | Deploy to AWS Bedrock AgentCore (WIP!) | `deploy/`, `agentcore/`, root `Dockerfile` |
 
 ## What this teaches
 
